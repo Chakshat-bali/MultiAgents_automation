@@ -2,7 +2,6 @@ import os
 import structlog
 from typing import List, Tuple
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from config import settings
 
 logger = structlog.get_logger(__name__)
@@ -15,7 +14,17 @@ class LongTermMemory:
     
     def __init__(self):
         self.index_path = settings.faiss_index_path
-        self.embeddings = FastEmbedEmbeddings(model_name=settings.embedding_model)
+        if settings.google_api_key:
+            logger.info("Using Google GenAI API for embeddings (memory efficient)")
+            from langchain_google_genai import GoogleGenAIEmbeddings
+            self.embeddings = GoogleGenAIEmbeddings(
+                model="models/text-embedding-004",
+                google_api_key=settings.google_api_key
+            )
+        else:
+            logger.warning("GOOGLE_API_KEY not found. Falling back to local FastEmbed (high memory usage)")
+            from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+            self.embeddings = FastEmbedEmbeddings(model_name=settings.embedding_model)
         self.vector_store = self._load_or_create_store()
 
     def _load_or_create_store(self) -> FAISS:
