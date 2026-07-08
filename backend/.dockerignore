@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.git
+tasks.db
+memory/faiss_index*
+agent_workspace/
+alembic/versions/*.py

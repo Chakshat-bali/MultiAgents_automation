@@ -1,0 +1,79 @@
+# docker-compose.yml — Local development orchestration
+#
+# Three services:
+#   postgres  — PostgreSQL database
+#   backend   — FastAPI + LangGraph agent
+#   frontend  — React (Vite build served by Nginx)
+#
+# Run everything: docker compose up --build
+# Run just backend + db: docker compose up postgres backend
+
+
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine       # alpine = smaller image
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres   # Change this in production
+      POSTGRES_DB: automator
+    ports:
+      - "5432:5432"                 # Expose for local tools (pgAdmin, psql)
+    volumes:
+      # Named volume persists data across container restarts
+      # Without this, every 'docker compose down' wipes your database
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Other services wait for this to pass before starting
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Database URL — 'postgres' is the service name, Docker DNS resolves it
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/automator
+      # All other config from .env file
+    env_file:
+      - .env                        # Your API keys — never commit this file
+    volumes:
+      # Persist FAISS index and agent workspace across restarts
+      - faiss_data:/app/memory
+      - workspace_data:/app/agent_workspace
+    depends_on:
+      postgres:
+        condition: service_healthy  # Wait for postgres healthcheck to pass
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── React Frontend ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"                   # Access at http://localhost:3000
+    depends_on:
+      - backend
+
+# ── Named volumes ────────────────────────────────────────────────────────────
+# Docker manages these — they persist until you run 'docker compose down -v'
+volumes:
+  postgres_data:
+  faiss_data:
+  workspace_data:
