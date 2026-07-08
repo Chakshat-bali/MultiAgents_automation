@@ -76,6 +76,10 @@ async def lifespan(app: FastAPI):
         os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
         logger.info("LangSmith tracing enabled", project=settings.langsmith_project)
 
+    logger.info("LLM Providers configured status", 
+                groq_available=bool(settings.groq_api_key), 
+                google_available=bool(settings.google_api_key))
+
     # Initialise PostgreSQL tables (including new CI tables)
     from competitive.models import CompanyRecord, IntelReportRecord  # register ORM models
     await init_db()
